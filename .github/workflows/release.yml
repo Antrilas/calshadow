@@ -50,7 +50,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
 
       - name: Bauen und hochladen
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
