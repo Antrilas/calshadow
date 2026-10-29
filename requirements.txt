@@ -1,8 +1,8 @@
-fastapi==0.115.6
+fastapi==0.162.0
 uvicorn==0.54.0
 jinja2==3.1.6
 python-multipart==0.0.32
-caldav==1.4.0
-icalendar==5.0.13
+caldav==1.6.0
+icalendar==5.0.14
 recurring-ical-events==2.2.3
 tzdata==2026.5

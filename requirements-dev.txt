@@ -1,2 +1,2 @@
 pytest==9.1.1
-radicale==3.2.3
+radicale==3.9.0
