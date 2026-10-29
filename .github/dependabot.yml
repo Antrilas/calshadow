@@ -4,11 +4,28 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    groups:
+      python-pakete:
+        update-types: [minor, patch]
+    ignore:
+      # Der Umstieg auf caldav 3 / icalendar 7 / recurring-ical-events 3 erfolgt gezielt:
+      # Die Schreibsperren von CalShadow setzen an Interna von caldav an.
+      - dependency-name: caldav
+        update-types: ["version-update:semver-major"]
+      - dependency-name: icalendar
+        update-types: ["version-update:semver-major"]
+      - dependency-name: recurring-ical-events
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: docker
     directory: "/"
     schedule:
       interval: weekly
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]
