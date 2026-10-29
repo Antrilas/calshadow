@@ -1,0 +1,511 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Einstellungen</h1>
+<p class="sub">Änderungen werden sofort wirksam. Speichern löst keinen Sync aus – der Sync-Zeitplan läuft unverändert weiter.</p>
+{% if saved %}<div class="alert ok">Einstellungen gespeichert.</div>{% endif %}
+{% if logs_cleared is not none %}<div class="alert ok">Alle Logs gelöscht ({{ logs_cleared }} Einträge).</div>{% endif %}
+
+<form method="post" action="/settings" id="settings-form" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other">
+  <input type="hidden" name="tab" id="settings-tab" value="privat">
+  <div class="settings-layout">
+    <nav class="settings-nav" aria-label="Einstellungsbereiche">
+      <a href="#privat" data-tab-link="privat">Privater Kalender<small>Quelle, nur lesend</small></a>
+      <a href="#beruflich" data-tab-link="beruflich">Beruflicher Kalender<small>Ziel, Test-Blocker, Aufräumen</small></a>
+      <a href="#regeln" data-tab-link="regeln">Sync-Regeln<small>Zeitraum, Arbeitszeit, Darstellung</small></a>
+      <a href="#zeitplan" data-tab-link="zeitplan">Sync-Zeitplan<small>automatischer Sync, Intervall</small></a>
+      <a href="#sicherung" data-tab-link="sicherung">Sicherungen<small>automatisch, Aufbewahrung</small></a>
+      <a href="#logs" data-tab-link="logs">Logs<small>Aufbewahrung, Termintitel</small></a>
+      <a href="#monitoring" data-tab-link="monitoring">Monitoring<small>Homepage, Uptime Kuma</small></a>
+    </nav>
+    <div class="settings-panels">
+
+
+  <div class="card form-section" data-tab="privat">
+    <h2>Privater Kalender <span class="badge muted">Quelle · nur lesend</span></h2>
+    <div class="fields">
+      <div class="field wide">
+        <label>Name</label>
+        <input type="text" name="source_name" value="{{ s.source_name }}" maxlength="60" placeholder="z. B. Posteo privat">
+        <div class="help">Erscheint in Logs, Dashboard und Monitoring.</div>
+      </div>
+      <div class="field">
+        <label>CalDAV-Server</label>
+        <input type="text" name="source_url" value="{{ s.source_url }}">
+        <div class="help">z. B. Posteo: <code>https://posteo.de:8443/</code></div>
+      </div>
+      <div class="field">
+        <label>Benutzername</label>
+        <input type="text" name="source_username" value="{{ s.source_username }}" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other" placeholder="name@posteo.de">
+      </div>
+      <div class="field wide">
+        <label>Passwort</label>
+        <!-- Gesperrt bis „Ändern“: kein Passwort-Manager (Bitwarden & Co.) füllt gesperrte Felder aus,
+             und gesperrte Felder werden beim Speichern nicht gesendet -> gespeichertes Passwort bleibt unangetastet -->
+        <div class="pw-row">
+          <input type="password" name="source_password" id="source_password" disabled autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other"
+                 placeholder="{{ '•••••••• gespeichert' if s.source_password else 'noch kein Passwort' }}">
+          <button type="button" class="btn" id="source_pw_edit" onclick="editPw('source')">{{ 'Ändern' if s.source_password else 'Eingeben' }}</button>
+          <button type="button" class="btn" id="source_pw_show" onclick="showPw('source', this)" hidden>Anzeigen</button>
+          <button type="button" class="btn" id="source_pw_cancel" onclick="cancelPw('source')" hidden>Abbrechen</button>
+        </div>
+      </div>
+      <div class="field wide">
+        <label>Kalender-URL(s)</label>
+        <textarea name="source_calendars" id="source_calendars" placeholder="https://posteo.de:8443/calendars/name/default/">{{ s.source_calendars }}</textarea>
+        <div class="help">Eine URL pro Zeile. Mit „Verbindung testen“ werden alle verfügbaren Kalender aufgelistet.</div>
+        <div class="test-result" id="source-result"></div>
+      </div>
+      <div class="field wide">
+        <label>Abfrageart</label>
+        <div style="display:grid; gap:8px">
+          <label class="check"><input type="radio" name="source_mode" value="freebusy" {{ 'checked' if s.source_mode == 'freebusy' }}>
+            <span><strong>Nur Frei/Belegt</strong> (empfohlen) – der Server liefert nur belegte Zeiträume, CalShadow sieht
+            keine Titel, Orte, Beschreibungen oder Teilnehmer. Als „frei“ markierte Termine lässt der Server selbst weg.
+            Ganztägig = belegt von Mitternacht bis Mitternacht. Termintitel in Logs sind in diesem Modus nicht möglich.</span></label>
+          <label class="check"><input type="radio" name="source_mode" value="events" {{ 'checked' if s.source_mode == 'events' }}>
+            <span><strong>Termine lesen</strong> – ruft die kompletten Termine ab (Inhalte werden nicht gespeichert).
+            Nötig, falls der Server keine Frei/Belegt-Abfrage unterstützt.</span></label>
+        </div>
+        <div class="help">Ein Wechsel ersetzt beim nächsten Sync alle Blocker einmalig durch neue. Manuelle Sicherungen lesen immer die kompletten Termine.</div>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:14px"><button type="button" class="btn" onclick="testConn('source')">Verbindung testen</button></div>
+  </div>
+
+  <div class="card form-section" data-tab="beruflich">
+    <h2>Beruflicher Kalender <span class="badge muted">Ziel</span></h2>
+    <div class="fields">
+      <div class="field wide">
+        <label>Name</label>
+        <input type="text" name="target_name" value="{{ s.target_name }}" maxlength="60" placeholder="z. B. Firma SOGo">
+        <div class="help">Erscheint in Logs, Sicherungen (auch im Dateinamen), Dashboard und Monitoring.</div>
+      </div>
+      <div class="field">
+        <label>CalDAV-Server</label>
+        <input type="text" name="target_url" value="{{ s.target_url }}" placeholder="https://mail.firma.de/SOGo/dav/">
+        <div class="help">z. B. SOGo: <code>https://&lt;host&gt;/SOGo/dav/</code></div>
+      </div>
+      <div class="field">
+        <label>Benutzername</label>
+        <input type="text" name="target_username" value="{{ s.target_username }}" autocomplete="off" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other">
+      </div>
+      <div class="field wide">
+        <label>Passwort</label>
+        <!-- Gesperrt bis „Ändern“: kein Passwort-Manager (Bitwarden & Co.) füllt gesperrte Felder aus,
+             und gesperrte Felder werden beim Speichern nicht gesendet -> gespeichertes Passwort bleibt unangetastet -->
+        <div class="pw-row">
+          <input type="password" name="target_password" id="target_password" disabled autocomplete="new-password" data-1p-ignore data-lpignore="true" data-bwignore="true" data-form-type="other"
+                 placeholder="{{ '•••••••• gespeichert' if s.target_password else 'noch kein Passwort' }}">
+          <button type="button" class="btn" id="target_pw_edit" onclick="editPw('target')">{{ 'Ändern' if s.target_password else 'Eingeben' }}</button>
+          <button type="button" class="btn" id="target_pw_show" onclick="showPw('target', this)" hidden>Anzeigen</button>
+          <button type="button" class="btn" id="target_pw_cancel" onclick="cancelPw('target')" hidden>Abbrechen</button>
+        </div>
+      </div>
+      <div class="field wide">
+        <label>Zielkalender-URL</label>
+        <input type="text" name="target_calendar" id="target_calendar" value="{{ s.target_calendar }}" placeholder="https://mail.firma.de/SOGo/dav/benutzer/Calendar/personal/">
+        <div class="help">Der Kalender, den Kollegen für deine Verfügbarkeit sehen (meist „Persönlicher Kalender“ / <code>personal</code>).</div>
+        <div class="test-result" id="target-result"></div>
+      </div>
+      <div class="field wide">
+        <label class="check"><input type="checkbox" name="target_uid_filter" {{ 'checked' if s.target_uid_filter }}>
+          <span><strong>Nur eigene Blocker abfragen</strong> (empfohlen) – der Server liefert beim Sync nur Termine,
+          deren Kennung mit <code>calshadow-</code> beginnt; Termine von dir und Kollegen werden nicht gelesen.
+          Nur deaktivieren, wenn der Server diesen Filter nicht unterstützt. Sicherungen lesen immer den ganzen Kalender.</span></label>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:14px; align-items:center">
+      <button type="button" class="btn" onclick="testConn('target')">Verbindung testen</button>
+      <button type="button" class="btn" id="tb-check" onclick="testBlocker('status', true)">Auf Test-Blocker prüfen</button>
+      <button type="button" class="btn" id="tb-create" onclick="testBlocker('create')">Test-Blocker anlegen (Mo 17:00–17:30)</button>
+      <button type="button" class="btn" id="tb-delete" onclick="testBlocker('delete')" hidden>Test-Blocker löschen</button>
+      <span id="tb-status" class="help" style="color:var(--muted); font-size:13.5px"></span>
+    </div>
+    <div class="actions" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border); align-items:center">
+      <button type="button" class="btn" id="cleanup-btn" onclick="cleanupPreview()">Aufräumen…</button>
+      <span class="help" style="color:var(--muted); font-size:13px"><strong>Aufräumen</strong> entfernt alle von CalShadow angelegten Blocker (auch vergangene und den Test-Blocker) und erscheint als eigener Lauf unter <a href="/runs?kind=cleanup">Läufe</a>. Verwendet die gespeicherten Einstellungen.</span>
+    </div>
+    <div id="cleanup-panel" class="alert warn" style="margin:14px 0 0" hidden>
+      <div id="cleanup-text"></div>
+      <label class="check" id="cleanup-sync-row" style="margin-top:10px" hidden>
+        <input type="checkbox" id="cleanup-disable-sync" checked>
+        <span>Automatischen Sync dabei deaktivieren – sonst legt der nächste Lauf die Blocker sofort wieder an.</span>
+      </label>
+      <div class="actions" style="margin-top:12px">
+        <button type="button" class="btn primary" id="cleanup-run" onclick="cleanupRun()">Aufräumen: Blocker endgültig entfernen</button>
+        <button type="button" class="btn" onclick="document.getElementById('cleanup-panel').hidden = true">Abbrechen</button>
+      </div>
+    </div>
+    <div id="cleanup-result"></div>
+  </div>
+
+  <div class="card form-section" data-tab="regeln">
+    <h2>Sync-Regeln</h2>
+    <div class="fields">
+      <div class="field">
+        <label>Tage in die Vergangenheit</label>
+        <input type="number" name="days_back" min="0" max="365" value="{{ s.days_back }}">
+        <div class="help">0 = ab heute. Bereits vergangene Blocker außerhalb dieses Zeitraums bleiben unverändert stehen.</div>
+      </div>
+      <div class="field">
+        <label>Tage in die Zukunft</label>
+        <input type="number" name="days_ahead" min="1" max="365" value="{{ s.days_ahead }}">
+      </div>
+      <div class="field">
+        <label>Arbeitszeit von</label>
+        <input type="time" name="work_start" value="{{ s.work_start }}">
+      </div>
+      <div class="field">
+        <label>Arbeitszeit bis</label>
+        <input type="time" name="work_end" value="{{ s.work_end }}">
+      </div>
+      <div class="field">
+        <label>Filtermodus</label>
+        <select name="filter_mode">
+          <option value="strict" {{ 'selected' if s.filter_mode == 'strict' }}>Nur Termine komplett innerhalb der Arbeitszeit</option>
+          <option value="clip" {{ 'selected' if s.filter_mode == 'clip' }}>Überlappende Termine auf Arbeitszeit zuschneiden</option>
+        </select>
+        <div class="help">„Komplett innerhalb“: Beginn ≥ {{ s.work_start }} und Ende ≤ {{ s.work_end }}.</div>
+      </div>
+      <div class="field wide">
+        <label>Wochentage</label>
+        <div class="weekdays">
+          {% for name in weekday_names %}
+            <label><input type="checkbox" name="weekdays" value="{{ loop.index0 }}" {{ 'checked' if loop.index0 in s.weekdays }}><span>{{ name }}</span></label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="field wide" style="display:grid; gap:8px">
+        <label class="check"><input type="checkbox" name="include_all_day" {{ 'checked' if s.include_all_day }}> <span>Ganztägige Termine übertragen (blockieren die komplette Arbeitszeit)</span></label>
+        <label class="check"><input type="checkbox" name="skip_transparent" {{ 'checked' if s.skip_transparent }}> <span>Termine ignorieren, die als „frei“ markiert sind</span></label>
+        <label class="check"><input type="checkbox" name="skip_tentative" {{ 'checked' if s.skip_tentative }}> <span>Vorläufige (tentative) Termine ignorieren</span></label>
+      </div>
+      <div class="field">
+        <label>Sicherheitsstopp: max. Löschungen pro Lauf</label>
+        <input type="number" name="max_deletions" min="0" value="{{ s.max_deletions }}">
+        <div class="help">Bricht ab, wenn mehr Blocker gelöscht würden (0 = kein Limit).</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card form-section" data-tab="regeln">
+    <h2>Darstellung im beruflichen Kalender</h2>
+    <div class="fields">
+      <div class="field">
+        <label>Titel der Blocker</label>
+        <input type="text" name="blocker_title" value="{{ s.blocker_title }}">
+      </div>
+      <div class="field">
+        <label>Sichtbarkeit (CLASS)</label>
+        <select name="blocker_class">
+          {% for v, t in [('PRIVATE','Privat'),('CONFIDENTIAL','Vertraulich'),('PUBLIC','Öffentlich')] %}
+            <option value="{{ v }}" {{ 'selected' if s.blocker_class == v }}>{{ t }}</option>
+          {% endfor %}
+        </select>
+        <div class="help">Blocker enthalten nie Titel, Ort, Beschreibung oder Teilnehmer des Originaltermins.</div>
+      </div>
+      <div class="field wide">
+        <label>Beschreibung der Blocker (optional)</label>
+        <textarea name="blocker_description" maxlength="1000" style="font-family:inherit; font-size:inherit" placeholder="z. B. „Privater Termin – bei Fragen bitte per Mail melden.“">{{ s.blocker_description }}</textarea>
+        <div class="help">Fester Text, der bei allen Blockern als Beschreibung erscheint. Leer = keine Beschreibung.
+          Eine Änderung aktualisiert beim nächsten Sync alle vorhandenen Blocker.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card form-section" data-tab="sicherung">
+    <h2>Sicherung des beruflichen Kalenders</h2>
+    <div class="fields">
+      <div class="field wide">
+        <label class="check"><input type="checkbox" name="backup_enabled" {{ 'checked' if s.backup_enabled }}> <span><strong>Vor dem Sync den kompletten beruflichen Kalender sichern</strong> – schlägt die Sicherung fehl, wird nichts geändert</span></label>
+      </div>
+      <div class="field">
+        <label>Höchstens eine Sicherung alle (Minuten)</label>
+        <input type="number" name="backup_min_interval_minutes" min="0" value="{{ s.backup_min_interval_minutes }}">
+        <div class="help">0 = vor jedem Sync-Lauf sichern.</div>
+      </div>
+      <div class="field wide"><label style="margin:6px 0 0">Aufbewahrung</label></div>
+      <div class="field">
+        <label>Die letzten … Sicherungen</label>
+        <input type="number" name="backup_keep_last" min="1" value="{{ s.backup_keep_last }}">
+      </div>
+      <div class="field">
+        <label>Eine pro Stunde für die letzten … Stunden</label>
+        <input type="number" name="backup_keep_hourly" min="0" value="{{ s.backup_keep_hourly }}">
+        <label class="check" style="margin-top:8px; font-weight:400"><input type="checkbox" name="backup_hourly_skip_weekend" {{ 'checked' if s.backup_hourly_skip_weekend }}> <span>Wochenende nicht mitzählen</span></label>
+      </div>
+      <div class="field">
+        <label>Eine pro Tag für die letzten … Tage</label>
+        <input type="number" name="backup_keep_daily" min="0" value="{{ s.backup_keep_daily }}">
+      </div>
+    </div>
+  </div>
+
+  <div class="card form-section" data-tab="zeitplan">
+    <h2>Sync-Zeitplan</h2>
+    <div class="fields">
+      <div class="field wide">
+        <label class="check"><input type="checkbox" name="enabled" {{ 'checked' if s.enabled }}> <span><strong>Automatischen Sync aktivieren</strong></span></label>
+      </div>
+      <div class="field">
+        <label>Intervall (Minuten)</label>
+        <input type="number" name="interval_minutes" min="1" value="{{ s.interval_minutes }}">
+      </div>
+      <div class="field">
+        <label>Zeitzone</label>
+        <select name="timezone">
+          {% for region, zones in timezone_groups %}
+            <optgroup label="{{ region }}">
+              {% for z in zones %}<option value="{{ z }}" {{ 'selected' if z == s.timezone }}>{{ z | replace('_', ' ') }}</option>{% endfor %}
+            </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="card form-section" data-tab="logs" id="logs">
+    <h2>Logs</h2>
+    <div class="fields">
+      <div class="field">
+        <label>Logs aufbewahren (Tage)</label>
+        <input type="number" name="log_retention_days" min="1" value="{{ s.log_retention_days }}">
+        <div class="help">Ältere Logs und Läufe werden automatisch gelöscht.</div>
+      </div>
+      <div class="field wide">
+        {% set fb = s.source_mode == 'freebusy' %}
+        <label class="check" id="titles-option"><input type="checkbox" name="log_event_titles" id="log_event_titles"
+               {{ 'checked' if s.log_event_titles and not fb }} {{ 'disabled' if fb }}>
+          <span><strong>Termintitel in Logs ausgeben</strong> (nur zur Fehlersuche) – Titel privater Termine erscheinen
+          in den Logs und bleiben dort bis zur Log-Bereinigung ({{ s.log_retention_days }} Tage) gespeichert.
+          In den beruflichen Kalender, an Uptime Kuma und in die Docker-Logs gelangen sie nie.</span></label>
+        <div class="help" id="titles-fb-note" {{ '' if fb else 'hidden' }}>Nicht verfügbar: Beim privaten Kalender ist
+          „Nur Frei/Belegt“ gewählt – CalShadow erhält dann keine Termintitel, die es ausgeben könnte.</div>
+      </div>
+    </div>
+    <div class="actions" style="margin-top:14px; align-items:center">
+      <button type="button" class="btn"
+              onclick="postAction('/logs/clear?back=settings', 'Alle Logs und die Liste der Sync-Läufe endgültig löschen? Sicherungen, Einstellungen und Blocker bleiben erhalten. Ungespeicherte Änderungen auf dieser Seite gehen verloren.')">Alle Logs löschen</button>
+      <span class="help" style="color:var(--muted); font-size:13px">Einzelne Läufe lassen sich auf den Seiten <a href="/runs">Läufe</a> und <a href="/logs">Logs</a> löschen.</span>
+    </div>
+  </div>
+
+  <div class="card form-section" data-tab="monitoring" id="homepage">
+    <h2>Monitoring <span class="badge muted">Homepage · Uptime Kuma</span></h2>
+    <div class="fields">
+      <div class="field wide">
+        <label>Lese-Token für <code>/api/homepage</code></label>
+        <div style="display:flex; gap:8px">
+          <input type="text" id="homepage_token" value="{{ s.homepage_token }}" readonly style="font-family:var(--mono)">
+          <button type="button" class="btn" onclick="navigator.clipboard.writeText(document.getElementById('homepage_token').value); this.textContent='Kopiert ✓'">Kopieren</button>
+          <button type="button" class="btn" onclick="postAction('/settings/homepage-token', 'Neuen Token erzeugen? Der alte funktioniert danach nicht mehr – Homepage muss angepasst werden. Ungespeicherte Änderungen auf dieser Seite gehen verloren.')">Neu erzeugen</button>
+        </div>
+        <div class="help">Erlaubt nur das Lesen des Status (Header <code>X-API-Key</code>), keine Einstellungen, keine Logs.</div>
+      </div>
+      <div class="field wide">
+        <label>Uptime Kuma: Push-URL für Sicherungen</label>
+        <div style="display:flex; gap:8px">
+          <input type="text" name="kuma_backup_push_url" value="{{ s.kuma_backup_push_url }}" placeholder="http://uptime-kuma:3001/api/push/AbCdEf123?status=up&msg=OK&ping=">
+          <button type="button" class="btn" onclick="kumaTest('backup', this)">Test</button>
+        </div>
+        <div class="help">Nach jeder automatischen Sicherung: „up“ mit Dauer als Ping bzw. „down“ mit Fehlermeldung. Leer = aus.</div>
+      </div>
+      <div class="field wide">
+        <label>Uptime Kuma: Push-URL für Sync-Läufe (optional)</label>
+        <div style="display:flex; gap:8px">
+          <input type="text" name="kuma_sync_push_url" value="{{ s.kuma_sync_push_url }}" placeholder="http://uptime-kuma:3001/api/push/XyZ987?status=up&msg=OK&ping=">
+          <button type="button" class="btn" onclick="kumaTest('sync', this)">Test</button>
+        </div>
+        <div class="help">Nach jedem echten Sync-Lauf (kein Dry-Run). Leer = aus.</div>
+      </div>
+      <div class="field">
+        <label>„Veraltet“ nach (× Sync-Intervall)</label>
+        <input type="number" name="stale_factor" min="1" value="{{ s.stale_factor }}">
+        <div class="help">Aktuell: nach {{ s.stale_factor * s.interval_minutes }} min ohne erfolgreichen Sync.</div>
+      </div>
+    </div>
+  </div>
+
+    </div>
+  </div>
+
+  <div class="savebar">
+    <button type="button" class="btn" onclick="startSync(true)">Vorschau (Dry-Run)</button>
+    <button type="submit" class="btn primary">Speichern</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Einstellungsbereiche: ein Formular, das Menü blendet nur den jeweiligen Bereich ein
+(function () {
+  const aliases = {homepage: 'monitoring'};
+  const tabs = [...new Set([...document.querySelectorAll('[data-tab]')].map(el => el.dataset.tab))];
+  function show(tab, push) {
+    tab = aliases[tab] || tab;
+    if (!tabs.includes(tab)) tab = tabs[0];
+    document.querySelectorAll('[data-tab]').forEach(el => { el.hidden = el.dataset.tab !== tab; });
+    document.querySelectorAll('[data-tab-link]').forEach(a => {
+      a.classList.toggle('active', a.dataset.tabLink === tab);
+      a.toggleAttribute('aria-current', a.dataset.tabLink === tab);
+    });
+    document.getElementById('settings-tab').value = tab;
+    if (push) history.replaceState(null, '', location.pathname + location.search + '#' + tab);
+  }
+  document.querySelectorAll('[data-tab-link]').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault(); show(a.dataset.tabLink, true); window.scrollTo({top: 0});
+  }));
+  window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+  show(location.hash.slice(1));
+})();
+
+function editPw(side) {
+  const f = document.getElementById(side + '_password');
+  f.disabled = false; f.value = ''; f.placeholder = 'neues Passwort eingeben'; f.focus();
+  document.getElementById(side + '_pw_edit').hidden = true;
+  document.getElementById(side + '_pw_show').hidden = false;
+  document.getElementById(side + '_pw_cancel').hidden = false;
+}
+function showPw(side, btn) {
+  const f = document.getElementById(side + '_password');
+  f.type = f.type === 'password' ? 'text' : 'password';
+  btn.textContent = f.type === 'password' ? 'Anzeigen' : 'Verbergen';
+}
+function cancelPw(side) {
+  const f = document.getElementById(side + '_password');
+  f.value = ''; f.type = 'password'; f.disabled = true; f.placeholder = 'unverändert';
+  document.getElementById(side + '_pw_edit').hidden = false;
+  const show = document.getElementById(side + '_pw_show'); show.hidden = true; show.textContent = 'Anzeigen';
+  document.getElementById(side + '_pw_cancel').hidden = true;
+}
+
+// Aufräumen: erst zählen, dann nach Bestätigung löschen
+async function cleanupPreview() {
+  const btn = document.getElementById('cleanup-btn'), panel = document.getElementById('cleanup-panel');
+  const out = document.getElementById('cleanup-result');
+  out.innerHTML = ''; panel.hidden = true;
+  btn.disabled = true; const label = btn.textContent; btn.innerHTML = '<span class="spinner"></span> Suche Blocker…';
+  try {
+    const j = await (await fetch('/api/cleanup/preview', {method: 'POST'})).json();
+    if (!j.ok) { showCleanup(false, j.message); return; }
+    if (!j.count) { showCleanup(true, 'Keine Blocker im beruflichen Kalender vorhanden – nichts zu tun.'); return; }
+    const range = j.count === 1 ? j.first : j.first + ' bis ' + j.last;
+    document.getElementById('cleanup-text').innerHTML =
+      '<strong>' + j.count + ' Blocker</strong> gefunden (' + range + (j.past ? ', davon ' + j.past + ' vergangen' : '') + '). ' +
+      'Vor dem Löschen wird der berufliche Kalender gesichert. Andere Termine werden nicht angefasst.';
+    document.getElementById('cleanup-sync-row').hidden = !j.sync_enabled;
+    panel.hidden = false;
+  } catch (e) { showCleanup(false, String(e)); }
+  finally { btn.disabled = false; btn.textContent = label; }
+}
+async function cleanupRun() {
+  const run = document.getElementById('cleanup-run');
+  run.disabled = true; run.innerHTML = '<span class="spinner"></span> Entferne…';
+  const fd = new FormData();
+  if (document.getElementById('cleanup-disable-sync').checked) fd.append('disable_sync', 'on');
+  try {
+    const j = await (await fetch('/api/cleanup/run', {method: 'POST', body: fd})).json();
+    document.getElementById('cleanup-panel').hidden = true;
+    if (!j.ok) { showCleanup(false, j.message); return; }
+    showCleanup(true, j.deleted + ' Blocker entfernt' + (j.skipped ? ', ' + j.skipped + ' nicht gelöscht' : '') +
+      (j.sync_disabled ? '. Automatischer Sync wurde deaktiviert' : '') + '. ', j.run_id);
+    if (j.sync_disabled) { const cb = document.querySelector('input[name="enabled"]'); if (cb) cb.checked = false; }
+  } finally { run.disabled = false; run.textContent = 'Aufräumen: Blocker endgültig entfernen'; }
+}
+function showCleanup(ok, msg, runId) {
+  const out = document.getElementById('cleanup-result');
+  out.innerHTML = '<div class="alert ' + (ok ? 'ok' : 'err') + '" style="margin:14px 0 0"></div>';
+  out.firstChild.textContent = (ok ? '✓ ' : '⚠ ') + msg;
+  if (runId) { const a = document.createElement('a'); a.href = '/logs?run=' + runId; a.textContent = 'Details im Log'; out.firstChild.appendChild(a); }
+}
+
+// Aktionen außerhalb des Einstellungsformulars absenden (sonst würde Enter in einem Feld sie auslösen)
+function postAction(url, question) {
+  if (!confirm(question)) return;
+  const f = document.createElement('form');
+  f.method = 'post'; f.action = url;
+  document.body.appendChild(f); f.submit();
+}
+
+// Termintitel-Option nur bei „Termine lesen“ möglich
+function updateTitleOption() {
+  const fb = document.querySelector('input[name="source_mode"][value="freebusy"]').checked;
+  const cb = document.getElementById('log_event_titles');
+  cb.disabled = fb;
+  if (fb) cb.checked = false;
+  document.getElementById('titles-option').style.opacity = fb ? '.55' : '';
+  document.getElementById('titles-fb-note').hidden = !fb;
+}
+document.querySelectorAll('input[name="source_mode"]').forEach(r => r.addEventListener('change', updateTitleOption));
+updateTitleOption();
+
+async function kumaTest(kind, btn) {
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/kuma-test/' + kind, {method: 'POST', body: new FormData(document.getElementById('settings-form'))});
+    const j = await r.json();
+    alert((j.ok ? '✓ ' : '⚠ ') + j.message);
+  } finally { btn.disabled = false; }
+}
+
+async function testBlocker(action, explicit) {
+  const status = document.getElementById('tb-status');
+  const create = document.getElementById('tb-create'), del = document.getElementById('tb-delete');
+  const check = document.getElementById('tb-check');
+  const loud = explicit || action !== 'status';  // stille Prüfung beim Laden der Seite
+  if (loud) status.innerHTML = '<span class="spinner"></span> Prüfe…';
+  create.disabled = del.disabled = check.disabled = true;
+  try {
+    const r = await fetch('/api/test-blocker/' + action, {method: 'POST', body: new FormData(document.getElementById('settings-form'))});
+    const j = await r.json();
+    if (!j.ok) { status.textContent = loud ? '⚠ ' + j.message : ''; return; }
+    create.hidden = j.exists; del.hidden = !j.exists;
+    if (j.exists) status.textContent = '✓ Test-Blocker vorhanden: ' + j.label;
+    else if (action === 'delete') status.textContent = '✓ Test-Blocker gelöscht';
+    else status.textContent = explicit ? 'Kein Test-Blocker vorhanden' : '';
+  } catch (e) { status.textContent = '⚠ ' + e; }
+  finally { create.disabled = del.disabled = check.disabled = false; }
+}
+{% if s.target_calendar %}testBlocker('status');{% endif %}
+
+async function testConn(side) {
+  const out = document.getElementById(side + '-result');
+  out.innerHTML = '<span class="spinner"></span> Verbinde…';
+  const fd = new FormData(document.getElementById('settings-form'));
+  try {
+    const r = await fetch('/api/test/' + side, {method: 'POST', body: fd});
+    const j = await r.json();
+    out.innerHTML = '';
+    if (!j.ok) {
+      out.innerHTML = '<div class="alert err" style="margin:0"></div>';
+      out.firstChild.textContent = j.message;
+      return;
+    }
+    const head = document.createElement('div');
+    head.innerHTML = '<span class="badge success">Verbindung OK</span> ' + j.calendars.length + ' Kalender gefunden:';
+    out.appendChild(head);
+    for (const c of j.calendars) {
+      const row = document.createElement('div');
+      row.className = 'cal';
+      row.innerHTML = '<div><strong></strong><br><code></code></div><button type="button" class="btn small">Übernehmen</button>';
+      row.querySelector('strong').textContent = c.name;
+      row.querySelector('code').textContent = c.url;
+      row.querySelector('button').onclick = () => {
+        if (side === 'target') { document.getElementById('target_calendar').value = c.url; }
+        else {
+          const ta = document.getElementById('source_calendars');
+          const lines = ta.value.split('\n').map(s => s.trim()).filter(Boolean);
+          if (!lines.includes(c.url)) lines.push(c.url);
+          ta.value = lines.join('\n');
+        }
+        // Liste ausblenden, kurze Bestätigung anzeigen
+        out.innerHTML = '<span class="badge success"></span> <span class="help" style="color:var(--muted)">Noch speichern nicht vergessen.</span>';
+        out.firstChild.textContent = '✓ „' + c.name + '“ übernommen';
+      };
+      out.appendChild(row);
+    }
+  } catch (e) { out.textContent = 'Fehler: ' + e; }
+}
+</script>
+{% endblock %}

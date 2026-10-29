@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% macro url(k=kind, st=status, p=1) -%}
+/runs?{{ {'kind': k, 'status': st, 'page': p} | dictsort | selectattr(1) | map('join', '=') | join('&') }}
+{%- endmacro %}
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap">
+  <div>
+    <h1>Läufe</h1>
+    <p class="sub">Alle Sync-, Dry-Run- und Aufräum-Läufe. Ein Klick auf eine Zeile öffnet das Protokoll unter <a href="/logs">Logs</a>.</p>
+  </div>
+  <div class="actions">
+    <button class="btn" onclick="startSync(true)">Vorschau (Dry-Run)</button>
+    <button class="btn primary" onclick="startSync(false)">Jetzt synchronisieren</button>
+  </div>
+</div>
+
+<div class="toolbar">
+  <span class="help" style="color:var(--muted); font-size:13px">Art:</span>
+  {% for k, label in [('', 'Alle'), ('live', 'Live'), ('dry', 'Dry-Run'), ('cleanup', 'Aufräumen')] %}
+    <a class="chip {{ 'on' if kind == k }}" href="{{ url(k=k) }}">{{ label }}</a>
+  {% endfor %}
+  <span class="help" style="color:var(--muted); font-size:13px; margin-left:12px">Status:</span>
+  {% for st, label in [('', 'Alle'), ('success', 'OK'), ('error', 'Fehler')] %}
+    <a class="chip {{ 'on' if status == st }}" href="{{ url(st=st) }}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<div class="grid stats">
+  <div class="card stat">
+    <div class="label">Läufe</div>
+    <div class="value">{{ total }}</div>
+    <div class="hint">{% if kind or status %}mit diesem Filter{% else %}insgesamt gespeichert{% endif %}</div>
+  </div>
+  <div class="card stat">
+    <div class="label">Erfolgreich</div>
+    <div class="value">{% if total %}{{ '%.0f' | format(100 * (agg.ok or 0) / total) }} %{% else %}–{% endif %}</div>
+    <div class="hint">{{ agg.ok or 0 }} OK · {{ agg.errors or 0 }} Fehler</div>
+  </div>
+  <div class="card stat">
+    <div class="label">Änderungen</div>
+    <div class="value"><span class="plus">+{{ agg.created }}</span> <span class="tilde">~{{ agg.updated }}</span> <span class="minus">−{{ agg.deleted }}</span></div>
+    <div class="hint">neu · geändert · gelöscht (Dry-Runs: nur geplant)</div>
+  </div>
+  <div class="card stat">
+    <div class="label">Dauer Ø</div>
+    <div class="value">{{ '%.1f s' | format(agg.avg_seconds) if agg.avg_seconds is not none else '–' }}</div>
+    <div class="hint">pro abgeschlossenem Lauf</div>
+  </div>
+</div>
+
+<div class="card" style="overflow-x:auto">
+  {% if runs %}
+  <table>
+    <thead><tr>
+      <th>#</th><th>Start</th><th>Status</th><th>Art</th>
+      <th class="num" title="Private Termine bzw. belegte Zeiträume im Zeitfenster">Privat</th>
+      <th class="num" title="Neu angelegte Blocker">Neu</th>
+      <th class="num" title="Geänderte Blocker">Geänd.</th>
+      <th class="num" title="Gelöschte Blocker">Gel.</th>
+      <th class="num" title="Unveränderte Blocker">Unv.</th>
+      <th class="num" title="Übersprungene private Termine">Übersp.</th>
+      <th class="num">Dauer</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for r in runs %}
+      <tr class="clickable {{ 'has-error' if r.error }}" onclick="if (!event.target.closest('form, a')) location.href='/logs?run={{ r.id }}'">
+        <td><a href="/logs?run={{ r.id }}">#{{ r.id }}</a></td>
+        <td style="white-space:nowrap">{{ r.started | dt }}
+          <div class="cell-sub">{{ {'schedule': 'Zeitplan', 'Aufräumen': 'Einstellungen'}.get(r.trigger, r.trigger | replace(' (Dry-Run)', '')) }}</div></td>
+        <td><span class="badge {{ r.status }}">{{ {'success':'OK','error':'Fehler','running':'läuft'}[r.status] }}</span></td>
+        <td style="white-space:nowrap">
+          {% if r.trigger == 'Aufräumen' %}<span class="badge running">Aufräumen</span>
+          {% elif r.dry_run %}<span class="badge dry">Dry-Run</span>
+          {% else %}<span class="badge muted">Live</span>{% endif %}
+        </td>
+        <td class="num">{{ r.source_events if r.trigger != 'Aufräumen' else '–' }}</td>
+        <td class="num plus">{{ r.created }}</td>
+        <td class="num tilde">{{ r.updated }}</td>
+        <td class="num minus">{{ r.deleted }}</td>
+        <td class="num">{{ r.unchanged }}</td>
+        <td class="num">{{ r.skipped }}</td>
+        <td class="num" style="white-space:nowrap">{{ duration(r) }}</td>
+        <td class="num">
+          {% if r.status != 'running' %}
+          <form method="post" action="/logs/run/{{ r.id }}/delete?back={{ url() | urlencode }}" style="display:inline"
+                onsubmit="return confirm('Lauf #{{ r.id }} samt Log endgültig löschen?')">
+            <button type="submit" class="icon-btn" title="Lauf #{{ r.id }} löschen" aria-label="Lauf #{{ r.id }} löschen">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6"/></svg>
+            </button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% if r.error %}
+      <tr class="error-row"><td></td><td colspan="11">{{ r.error }}</td></tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if pages > 1 %}
+  <div class="toolbar" style="justify-content:center; margin:16px 0 0">
+    {% if page > 1 %}<a class="btn small" href="{{ url(p=page - 1) }}">← Neuere</a>{% endif %}
+    <span class="help" style="color:var(--muted); font-size:13px">Seite {{ page }} von {{ pages }}</span>
+    {% if page < pages %}<a class="btn small" href="{{ url(p=page + 1) }}">Ältere →</a>{% endif %}
+  </div>
+  {% endif %}
+  {% else %}
+    <div class="empty">{% if kind or status %}Keine Läufe für diesen Filter.{% else %}Noch keine Läufe.{% endif %}</div>
+  {% endif %}
+</div>
+{% endblock %}

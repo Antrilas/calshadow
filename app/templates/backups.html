@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap">
+  <div style="flex:1; min-width:300px">
+    <h1>Sicherungen</h1>
+    <p class="sub">Vor einem Sync-Lauf (außer Dry-Run) wird der komplette berufliche Kalender <strong>„{{ s.target_name }}“</strong> automatisch gesichert – höchstens
+    {% if s.backup_min_interval_minutes %}alle {{ s.backup_min_interval_minutes }} Minuten{% else %}vor jedem Lauf{% endif %}.
+    Aufbewahrt werden die letzten {{ s.backup_keep_last }}, je eine pro Stunde für {{ s.backup_keep_hourly }} Stunden{{ ' (ohne Wochenende)' if s.backup_hourly_skip_weekend }}
+    und je eine pro Tag für {{ s.backup_keep_daily }} Tage. <strong>Manuelle Sicherungen</strong> bleiben, bis du sie löschst. Jede Sicherung lässt sich einzeln löschen.</p>
+  </div>
+  <div class="actions">
+    <button type="button" class="btn" onclick="manualBackup('source', this)" {% if not configured.source %}disabled title="Privater Kalender noch nicht eingerichtet"{% endif %}>„{{ s.source_name }}“ jetzt sichern</button>
+    <button type="button" class="btn primary" onclick="manualBackup('target', this)" {% if not configured.target %}disabled title="Beruflicher Kalender noch nicht eingerichtet"{% endif %}>„{{ s.target_name }}“ jetzt sichern</button>
+  </div>
+</div>
+<div id="backup-result"></div>
+{% if not s.backup_enabled %}<div class="alert warn">Die automatische Sicherung ist deaktiviert. Aktivieren in den <a href="/settings">Einstellungen</a>.</div>{% endif %}
+
+<div class="card">
+  {% if backups %}
+  <table>
+    <thead><tr><th>Zeitpunkt</th><th>Kalender</th><th>Typ</th><th>Lauf</th><th class="num">Objekte</th><th class="num">Größe</th><th class="num">Dauer</th><th></th></tr></thead>
+    <tbody>
+    {% for b in backups %}
+      <tr>
+        <td>{{ b.created | dt }}</td>
+        <td>{{ b.calendar_name or '–' }} <span class="badge muted">{{ 'privat' if b.side == 'source' else 'beruflich' }}</span></td>
+        <td><span class="badge {{ {'aktuell':'muted','stündlich':'running','täglich':'success','manuell':'dry'}.get(b.kind, 'error') }}">{{ b.kind }}</span></td>
+        <td>{% if b.run_id %}<a href="/logs?run={{ b.run_id }}">#{{ b.run_id }}</a>{% else %}–{% endif %}</td>
+        <td class="num">{{ b.objects if b.objects is not none else '–' }}</td>
+        <td class="num">{{ '%.0f' | format(b.size / 1024) }} KB</td>
+        <td class="num">{{ '%.1f s' | format(b.duration) if b.duration is not none else '–' }}</td>
+        <td class="num" style="white-space:nowrap">
+          <a class="btn small" href="/backups/{{ b.name }}">Herunterladen</a>
+          <form method="post" action="/backups/{{ b.name }}/delete" style="display:inline"
+                onsubmit="return confirm('{{ 'Diese manuelle Sicherung' if b.manual else 'Diese automatische Sicherung' }} vom {{ b.created | dt }} endgültig löschen?')">
+            <button type="submit" class="btn small">Löschen</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% set durations = backups | selectattr('duration') | map(attribute='duration') | list %}
+  <p class="sub" style="margin:14px 0 0">{{ backups | length }} Sicherungen, zusammen {{ '%.1f' | format(total_size / 1048576) }} MB{% if durations %},
+  Dauer Ø {{ '%.1f' | format(durations | sum / durations | length) }} s, max. {{ '%.1f' | format(durations | max) }} s{% endif %}.
+  Wiederherstellen: ZIP entpacken und <code>kalender.ics</code> im Kalender (z. B. SOGo) über „Importieren“ einlesen. Einzelne Termine liegen unverändert unter <code>objects/</code>.</p>
+  {% else %}
+    <div class="empty">Noch keine Sicherungen vorhanden.</div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function manualBackup(side, btn) {
+  const out = document.getElementById('backup-result');
+  const label = btn.textContent;
+  const buttons = [...document.querySelectorAll('.actions .btn')].filter(b => !b.disabled);
+  buttons.forEach(b => b.disabled = true);
+  btn.innerHTML = '<span class="spinner"></span> Sichere…';
+  try {
+    const r = await fetch('/api/backup/' + side, {method: 'POST'});
+    const j = await r.json();
+    out.innerHTML = '<div class="alert ' + (j.ok ? 'ok' : 'err') + '"></div>';
+    out.firstChild.textContent = (j.ok ? '✓ ' : '⚠ ') + j.message;
+    if (j.ok) setTimeout(() => location.reload(), 1200);
+  } catch (e) {
+    out.innerHTML = '<div class="alert err"></div>';
+    out.firstChild.textContent = '⚠ ' + e;
+  } finally {
+    btn.textContent = label;
+    buttons.forEach(b => b.disabled = false);
+  }
+}
+</script>
+{% endblock %}

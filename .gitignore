@@ -1,0 +1,19 @@
+# Laufzeitdaten und Geheimnisse
+data/
+.env
+docker-compose.override.yml
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# Rohdateien der Markenbilder (eingebunden sind sie unter app/static/brand/)
+brand images/
+*:Zone.Identifier
+
+# Editoren / Betriebssystem
+.vscode/
+.idea/
+.DS_Store

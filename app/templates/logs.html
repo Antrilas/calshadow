@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap">
+  <h1>Logs</h1>
+  <a class="btn" href="/settings#logs">Log-Einstellungen</a>
+</div>
+{% if cleared is not none %}<div class="alert ok">Logs gelöscht ({{ cleared }} Einträge).</div>{% endif %}
+{% if settings.log_event_titles %}
+<p class="sub">Protokoll jedes Laufs. Übersicht aller Läufe unter <a href="/runs">Läufe</a>.</p>
+<div class="alert warn">Debug-Option aktiv: <strong>Titel privater Termine werden in die Logs geschrieben.</strong> Nach der Fehlersuche in den <a href="/settings">Einstellungen</a> wieder ausschalten.</div>
+{% else %}
+<p class="sub">Protokoll jedes Laufs. Termininhalte werden nicht geloggt – nur Zeiten. Übersicht aller Läufe unter <a href="/runs">Läufe</a>.</p>
+{% endif %}
+
+<div class="logs-layout">
+  <div class="card runlist">
+    {% for r in runs %}
+      <a href="/logs?run={{ r.id }}{% if level %}&level={{ level }}{% endif %}" class="{{ 'active' if current and current.id == r.id }}">
+        <div><strong>#{{ r.id }}</strong> · {{ r.started | dt }}</div>
+        <div class="meta">
+          <span class="badge {{ r.status }}">{{ {'success':'OK','error':'Fehler','running':'läuft'}[r.status] }}</span>
+          {% if r.dry_run %}<span class="badge dry">Dry-Run</span>{% endif %}
+          <span class="plus">+{{ r.created }}</span><span class="tilde">~{{ r.updated }}</span><span class="minus">−{{ r.deleted }}</span>
+        </div>
+      </a>
+    {% else %}
+      <div class="empty">Noch keine Läufe.</div>
+    {% endfor %}
+  </div>
+
+  <div class="card">
+    {% if current %}
+      <div class="toolbar">
+        <h2 style="margin:0">Lauf #{{ current.id }}</h2>
+        <span class="badge {{ current.status }}" id="run-status">{{ {'success':'OK','error':'Fehler','running':'läuft'}[current.status] }}</span>
+        {% if current.dry_run %}<span class="badge dry">Dry-Run</span>{% endif %}
+        <span class="badge muted">{{ current.trigger }}</span>
+        <span class="badge muted">{{ duration(current) }}</span>
+        {% if current.status != 'running' %}
+        <form method="post" action="/logs/run/{{ current.id }}/delete" style="display:inline" onsubmit="return confirm('Lauf #{{ current.id }} samt Log endgültig löschen?')">
+          <button type="submit" class="btn small">Diesen Lauf löschen</button>
+        </form>
+        {% endif %}
+        <div style="flex:1"></div>
+        {% set active = level.split(',') if level else [] %}
+        {% for l in ['DEBUG','INFO','SUCCESS','WARNING','ERROR'] %}
+          <button class="chip {{ 'on' if l in active }}" data-level="{{ l }}" onclick="toggleLevel(this)">{{ l }}</button>
+        {% endfor %}
+      </div>
+      <div class="console" id="console">
+        {% for l in logs %}
+          <div class="line {{ l.level }}" data-id="{{ l.id }}"><span class="ts">{{ l.ts | dt('%H:%M:%S') }}</span><span class="lvl {{ l.level }}">{{ l.level }}</span><span class="msg">{{ l.message }}</span></div>
+        {% else %}
+          <div class="line"><span></span><span></span><span class="msg" style="color:#6b7385">Keine Einträge{% if level %} für diesen Filter{% endif %}.</span></div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="empty">Wähle links einen Lauf aus.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if current %}
+<script>
+const runId = {{ current.id }};
+const level = {{ level | tojson }};
+function toggleLevel(btn) {
+  const on = new Set(level ? level.split(',') : []);
+  on.has(btn.dataset.level) ? on.delete(btn.dataset.level) : on.add(btn.dataset.level);
+  const q = [...on].join(',');
+  location.href = '/logs?run=' + runId + (q ? '&level=' + q : '');
+}
+const con = document.getElementById('console');
+con.scrollTop = con.scrollHeight;
+
+{% if current.status == 'running' %}
+const pad = s => String(s).padStart(2, '0');
+function fmtTs(iso) { const d = new Date(iso); return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds()); }
+function lastId() { const l = con.querySelectorAll('.line[data-id]'); return l.length ? +l[l.length - 1].dataset.id : 0; }
+async function poll() {
+  const r = await fetch(`/api/logs?run=${runId}&after=${lastId()}&level=${level}`);
+  const j = await r.json();
+  for (const l of j.logs) {
+    const div = document.createElement('div');
+    div.className = 'line ' + l.level; div.dataset.id = l.id;
+    div.innerHTML = '<span class="ts"></span><span class="lvl ' + l.level + '"></span><span class="msg"></span>';
+    div.children[0].textContent = fmtTs(l.ts); div.children[1].textContent = l.level; div.children[2].textContent = l.message;
+    con.appendChild(div); con.scrollTop = con.scrollHeight;
+  }
+  if (j.run && j.run.status === 'running') setTimeout(poll, 1000);
+  else setTimeout(() => location.reload(), 500);
+}
+poll();
+{% endif %}
+</script>
+{% endif %}
+{% endblock %}

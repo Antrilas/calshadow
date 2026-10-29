@@ -1,0 +1,11 @@
+data/
+__pycache__/
+.env
+.git
+.github/
+tests/
+docs/
+brand images/
+docker-compose*.yml
+deploy/
+*.md

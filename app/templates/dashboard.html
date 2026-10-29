@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap">
+  <div style="flex:1; min-width:280px">
+    <h1>Dashboard</h1>
+    <p class="sub">Termine aus dem privaten Kalender <strong>„{{ settings.source_name }}“</strong> werden als „{{ settings.blocker_title }}“ in den beruflichen Kalender <strong>„{{ settings.target_name }}“</strong> übertragen.</p>
+  </div>
+  <div class="actions">
+    <button class="btn" onclick="startSync(true)" {% if not configured %}disabled{% endif %}>Vorschau (Dry-Run)</button>
+    <button class="btn primary" onclick="startSync(false)" {% if not configured %}disabled{% endif %}>Jetzt synchronisieren</button>
+  </div>
+</div>
+
+{% if not configured %}
+  <div class="alert warn">Noch nicht eingerichtet. Bitte zuerst in den <a href="/settings">Einstellungen</a> den privaten und den beruflichen Kalender konfigurieren.</div>
+{% endif %}
+{% if settings.log_event_titles %}
+  <div class="alert warn">Debug-Option aktiv: Titel privater Termine werden in die Logs geschrieben. Nach der Fehlersuche in den <a href="/settings">Einstellungen</a> wieder ausschalten.</div>
+{% endif %}
+{% if configured and not settings.enabled %}
+  <div class="alert warn">Der automatische Sync ist deaktiviert. Aktivieren in den <a href="/settings">Einstellungen</a>.</div>
+{% endif %}
+
+<div class="grid stats">
+  <div class="card stat">
+    <div class="label">Letzter Sync</div>
+    <div class="value">
+      {% if last %}<span class="badge {{ last.status }}">{{ 'OK' if last.status == 'success' else 'Fehler' }}</span>{% else %}–{% endif %}
+    </div>
+    <div class="hint">{{ last.finished | ago if last else 'noch kein Lauf' }}</div>
+  </div>
+  <div class="card stat">
+    <div class="label">Nächster Kalender-Sync</div>
+    <div class="value"><span class="js-next-sync" data-format="long">{{ next_run | dt('%H:%M') if next_run else '–' }}</span></div>
+    <div class="hint">{% if settings.enabled and next_run %}um {{ next_run | dt('%H:%M') }}<span class="js-with-backup"></span> · alle {{ settings.interval_minutes }} min{% elif settings.enabled %}alle {{ settings.interval_minutes }} min{% else %}deaktiviert{% endif %}</div>
+  </div>
+  <div class="card stat">
+    <div class="label">Aktive Blocker</div>
+    <div class="value">{{ blockers | length }}</div>
+    <div class="hint">nächste {{ settings.days_ahead }} Tage</div>
+  </div>
+  <div class="card stat">
+    <div class="label">Letzte Änderungen</div>
+    <div class="value">
+      {% if last %}<span class="plus">+{{ last.created }}</span> <span class="tilde">~{{ last.updated }}</span> <span class="minus">−{{ last.deleted }}</span>{% else %}–{% endif %}
+    </div>
+    <div class="hint">neu · geändert · gelöscht</div>
+  </div>
+</div>
+
+{% if last and last.status == 'error' %}
+  <div class="alert err"><strong>Letzter Fehler:</strong> {{ last.error }}</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:16px">
+  {% set done = history | rejectattr('status', 'equalto', 'running') | list %}
+  {% set ok = done | selectattr('status', 'equalto', 'success') | list | length %}
+  <h2 style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap">
+    Sync-Verlauf
+    <span class="help" style="color:var(--muted); font-size:13px; font-weight:400">
+      {% if done %}<strong style="color:{{ 'var(--ok)' if ok == done | length else 'var(--text)' }}">{{ '%.1f' | format(100 * ok / done | length) | replace('.0', '') }} %</strong>
+      erfolgreich · letzte {{ done | length }} Syncs{% else %}noch keine Syncs{% endif %}
+    </span>
+  </h2>
+  <div class="beats" role="list" aria-label="Verlauf der letzten Syncs">
+    {% for _ in range(history_bars - history | length) %}<span class="beat beat-none" aria-hidden="true"></span>{% endfor %}
+    {% for r in history %}
+      <a class="beat {{ r.status }}" role="listitem" href="/logs?run={{ r.id }}"
+         title="#{{ r.id }} · {{ r.started | dt }} · {{ {'success':'OK','error':'Fehler','running':'läuft'}[r.status] }}{% if r.status == 'success' %} · +{{ r.created }} ~{{ r.updated }} −{{ r.deleted }}{% elif r.error %} · {{ r.error }}{% endif %}"></a>
+    {% endfor %}
+  </div>
+  <div class="beats-legend">
+    <span>{{ history[0].started | ago if history else '' }}</span>
+    <span>jetzt</span>
+  </div>
+</div>
+
+<div class="grid two">
+  <div class="card">
+    <h2 style="display:flex; justify-content:space-between; align-items:center">Letzte Läufe <a class="btn small" href="/runs">Alle Läufe</a></h2>
+    {% if runs %}
+    <table>
+      <thead><tr><th>Zeit</th><th>Status</th><th>Auslöser</th><th class="num">Neu</th><th class="num">Geänd.</th><th class="num">Gelöscht</th><th class="num">Dauer</th></tr></thead>
+      <tbody>
+      {% for r in runs %}
+        <tr class="clickable" onclick="location.href='/logs?run={{ r.id }}'">
+          <td>{{ r.started | dt }}</td>
+          <td>
+            <span class="badge {{ r.status }}">{{ {'success':'OK','error':'Fehler','running':'läuft'}[r.status] }}</span>
+            {% if r.dry_run %}<span class="badge dry">Dry-Run</span>{% endif %}
+          </td>
+          <td>{{ {'schedule': 'Zeitplan'}.get(r.trigger, r.trigger) }}</td>
+          <td class="num plus">{{ r.created }}</td>
+          <td class="num tilde">{{ r.updated }}</td>
+          <td class="num minus">{{ r.deleted }}</td>
+          <td class="num">{{ duration(r) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="empty">Noch keine Läufe.</div>{% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Kommende Blocker in „{{ settings.target_name }}“</h2>
+    {% if blockers %}
+    <ul class="blockers">
+      {% for b in blockers %}
+        <li class="{{ 'today' if b.is_today }}"><span class="day">{{ b.day }}</span><span class="time">{{ b.time }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}<div class="empty">Keine Blocker – entweder ist der Kalender frei oder es lief noch kein Sync.</div>{% endif %}
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+{% if running %}<script>setTimeout(() => location.reload(), 3000);</script>{% endif %}
+{% endblock %}

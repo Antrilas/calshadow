@@ -1,0 +1,19 @@
+# CalShadow aus dem Quellcode bauen und starten (Entwicklung / Self-Hosting ohne Registry).
+# Für den Betrieb mit fertigem Image siehe deploy/compose.yaml.
+# Passwort der Weboberfläche in .env:  WEB_PASSWORD=...
+name: calshadow
+
+services:
+  calshadow:
+    build: .
+    image: calshadow
+    container_name: calshadow
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Europe/Berlin
+      WEB_USER: admin
+      WEB_PASSWORD: ${WEB_PASSWORD:?WEB_PASSWORD in .env setzen}
+    volumes:
+      - ./data:/data

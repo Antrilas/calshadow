@@ -1,0 +1,7 @@
+# Radicale-Konfiguration für die Integrationstests (ohne Anmeldung, nur lokal)
+[server]
+hosts = 127.0.0.1:5232
+[auth]
+type = none
+[storage]
+filesystem_folder = /tmp/calshadow-test-collections

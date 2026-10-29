@@ -1,0 +1,45 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    name: Unit- und Integrationstests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Abhängigkeiten installieren
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: CalDAV-Testserver (Radicale) starten
+        run: |
+          radicale --config tests/radicale/config &
+          for i in $(seq 1 30); do curl -s -o /dev/null http://127.0.0.1:5232/ && break; sleep 0.5; done
+
+      - name: Tests
+        run: python -m pytest -v tests
+
+  docker:
+    name: Docker-Image bauen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
