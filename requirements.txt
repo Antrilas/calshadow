@@ -5,4 +5,4 @@ python-multipart==0.0.20
 caldav==1.4.0
 icalendar==5.0.13
 recurring-ical-events==2.2.3
-tzdata==2024.2
+tzdata==2026.5
