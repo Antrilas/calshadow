@@ -1,7 +1,7 @@
 fastapi==0.115.6
 uvicorn==0.32.1
 jinja2==3.1.4
-python-multipart==0.0.20
+python-multipart==0.0.32
 caldav==1.4.0
 icalendar==5.0.13
 recurring-ical-events==2.2.3
