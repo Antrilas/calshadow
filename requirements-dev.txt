@@ -1,2 +1,2 @@
-pytest==9.1.1
+pytest==9.2.0
 radicale==3.9.0
