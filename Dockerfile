@@ -1,12 +1,12 @@
 # Stufe 1: Abhängigkeiten installieren (pip wird nur hier gebraucht)
-FROM python:3.12-alpine AS build
+FROM python:3.15-alpine AS build
 
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --no-compile --target /deps -r /tmp/requirements.txt \
  && find /deps -depth \( -name "__pycache__" -o -name "tests" -o -name "*.pyi" \) -exec rm -rf {} +
 
 # Stufe 2: schlankes Laufzeit-Image ohne pip und Build-Werkzeuge
-FROM python:3.12-alpine
+FROM python:3.15-alpine
 
 ARG VERSION=dev
 LABEL org.opencontainers.image.title="CalShadow" \
